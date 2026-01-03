@@ -30,7 +30,7 @@ public class Property
     public string? Country { get; set; }
 
     [Column("property_type")]
-    public string? PropertyType { get; set; }
+    public PropertyTypeEnum PropertyType { get; set; }
 
     [Column("max_guests")]
     public int? MaxGuests { get; set; }

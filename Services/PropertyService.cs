@@ -50,10 +50,10 @@ public class PropertyService : IPropertyService
             return null;
         }
 
-        property.Images.ToList().ForEach(async (image) =>
+        foreach (var image in property.Images)
         {
             image.StoragePath = await _storage.GetSignedUrlAsync(image.StoragePath);
-        });
+        }
 
         return property;
     }
