@@ -58,10 +58,10 @@ public class PropertyController : ControllerBase
     [EndpointSummary("Updates the property matching the specified ID.")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(int))]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [Consumes("application/json")]
+    [Consumes("multipart/form-data")]
     public async Task<ActionResult<int>> Update(
         int id,
-        [FromBody] PropertyCreateRequestDTO dto)
+        [FromForm] PropertyCreateRequestDTO dto)
     {
         var updatedId = await _propertyService.UpdatePropertyAsync(id, dto);
         if (updatedId == null)

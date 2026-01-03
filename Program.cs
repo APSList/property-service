@@ -9,19 +9,30 @@ using property_service.Options;
 using property_service.Services;
 using Serilog;
 using Serilog.Formatting.Compact;
-using Serilog.Formatting.Json;
-using Serilog.Sinks.Network;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularDev", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+        // .AllowCredentials(); // samo èe uporabljaš cookies/auth z withCredentials
+    });
+});
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.ReferenceHandler =
-            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -41,6 +52,11 @@ builder.Services.AddSingleton<ISupabaseStorageService, SupabaseStorageService>()
 
 builder.Services
     .AddGraphQLServer()
+    .ModifyCostOptions(o =>
+    {
+        o.MaxFieldCost = 5_000;
+        o.MaxTypeCost = 5_000;
+    })
     .AddQueryType<PropertyQuery>()
     .AddFiltering()
     .AddSorting();
@@ -54,8 +70,16 @@ builder.Host.UseSerilog((context, config) =>
 {
     config
         .MinimumLevel.Information()
+        .MinimumLevel.Override(
+            "Microsoft.EntityFrameworkCore.Database.Command",
+            Serilog.Events.LogEventLevel.Warning)
+
+        // (opcijsko) še bolj na splošno
+        .MinimumLevel.Override(
+            "Microsoft.EntityFrameworkCore",
+            Serilog.Events.LogEventLevel.Warning)
         .Enrich.FromLogContext()
-        .Enrich.WithProperty("Service", "property-service")
+        .Enrich.WithProperty("Service", "payment-service")
         .WriteTo.Console()
         .WriteTo.Http(
             requestUri: "http://localhost:5044", // lokalni Logstash
@@ -80,10 +104,8 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseCors("AllowAngularDev");
 }
-
-// GraphQL endpoint
-app.MapGraphQL("/graphql");
 
 // Health endpoints
 app.MapHealthChecks("/health/live", new HealthCheckOptions
@@ -95,6 +117,13 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = _ => true
 });
+
+// GraphQL endpoint
+app.MapGraphQL("/graphql");
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
 
 app.MapGet("/ok", () =>
 {
@@ -109,11 +138,7 @@ app.MapGet("/error", () =>
 });
 
 app.UseHttpMetrics();     // meri HTTP odzivnost, status kode, metode
-app.MapMetrics();         // /metrics endpoint
-
-app.UseHttpsRedirection();
-
-app.UseAuthorization();
+app.MapMetrics();         // metrics endpoint
 
 app.MapControllers();
 

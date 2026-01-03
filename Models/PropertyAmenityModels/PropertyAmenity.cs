@@ -10,7 +10,7 @@ namespace property_service.Models.PropertyAmenityModels;
 public class PropertyAmenity
 {
     [Column("property_id")]
-    public int PropertyId { get; set; }
+    public int? PropertyId { get; set; }
 
     [Required]
     [Column("amenity_name")]
