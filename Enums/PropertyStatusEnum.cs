@@ -2,7 +2,7 @@
 
 public enum PropertyStatusEnum
 {
-    Available,
-    SoldOut,
-    Closed
+    [GraphQLName("Available")] Available,
+    [GraphQLName("SoldOut")] SoldOut,
+    [GraphQLName("Closed")] Closed
 }

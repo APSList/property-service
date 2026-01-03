@@ -8,11 +8,12 @@ namespace property_service.Models.PropertyImageModels;
 public class PropertyImage
 {
     [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     [Column("id")]
-    public int Id { get; set; }
+    public int? Id { get; set; }
 
     [Column("property_id")]
-    public int PropertyId { get; set; }
+    public int? PropertyId { get; set; }
 
     [Column("storage_path")]
     public string StoragePath { get; set; } = null!;
