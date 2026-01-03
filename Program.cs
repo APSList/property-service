@@ -1,9 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Prometheus;
 using property_service.Database;
 using property_service.GraphQl.Queries;
 using property_service.Interfaces;
 using property_service.Options;
 using property_service.Services;
+using Serilog;
+using Serilog.Formatting.Compact;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -60,6 +65,38 @@ builder.Services
 builder.Services.AddDbContext<PropertyDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Supabase")));
 
+//Logging
+builder.Host.UseSerilog((context, config) =>
+{
+    config
+        .MinimumLevel.Information()
+        .MinimumLevel.Override(
+            "Microsoft.EntityFrameworkCore.Database.Command",
+            Serilog.Events.LogEventLevel.Warning)
+
+        // (opcijsko) še bolj na splošno
+        .MinimumLevel.Override(
+            "Microsoft.EntityFrameworkCore",
+            Serilog.Events.LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Service", "payment-service")
+        .WriteTo.Console()
+        .WriteTo.Http(
+            requestUri: "http://localhost:5044", // lokalni Logstash
+            queueLimitBytes: null,
+            textFormatter: new RenderedCompactJsonFormatter()
+        );
+});
+
+//Health checks
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy())
+    .AddNpgSql(
+        builder.Configuration.GetConnectionString("Supabase") ?? "",
+        name: "postgres",
+        failureStatus: HealthStatus.Unhealthy
+    );
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -70,12 +107,38 @@ if (app.Environment.IsDevelopment())
     app.UseCors("AllowAngularDev");
 }
 
+// Health endpoints
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Name == "self"
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = _ => true
+});
+
 // GraphQL endpoint
 app.MapGraphQL("/graphql");
 
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+app.MapGet("/ok", () =>
+{
+    Log.Information("OK endpoint called");
+    return "OK";
+});
+
+app.MapGet("/error", () =>
+{
+    Log.Error("Something went wrong");
+    return Results.Problem("Error");
+});
+
+app.UseHttpMetrics();     // meri HTTP odzivnost, status kode, metode
+app.MapMetrics();         // metrics endpoint
 
 app.MapControllers();
 

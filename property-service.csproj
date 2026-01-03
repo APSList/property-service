@@ -28,7 +28,7 @@
     <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <PackageReference Include="Serilog.Sinks.Http" Version="9.2.0" />
     <PackageReference Include="Serilog.Sinks.Network" Version="3.0.0" />
-    <PackageReference Include="Supabase" Version="0.10.5" />
+    <PackageReference Include="Supabase" Version="1.1.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

@@ -78,3 +78,7 @@ jobs:
             --set image.repository=$IMAGE_REPO \
             --set image.tag=$IMAGE_TAG \
             --set image.pullPolicy=Always
+            --set actualSecrets.DB_URL_PROPERTY="${{ secrets.DB_URL_PROPERTY }}"
+            --set actualSecrets.DB_STORAGE_BUCKET="${{ secrets.DB_STORAGE_BUCKET}}"
+            --set actualSecrets.DB_SERVICE_ROLE_KEY="${{ secrets.DB_SERVICE_ROLE_KEY }}"
+            --set actualSecrets.DB_URL_STORAGE="${{ secrets.DB_URL_STORAGE }}"
