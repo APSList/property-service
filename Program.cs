@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.OpenApi.Models;
 using Prometheus;
 using property_service.Database;
 using property_service.GraphQl.Queries;
@@ -88,13 +89,33 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+var cfgPrefix = builder.Configuration["SwaggerPrefix"];
+
+if (!string.IsNullOrEmpty(cfgPrefix))
+{
+    app.UseSwagger(c =>
+    {
+        c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
+        {
+            var basePath = httpReq.PathBase.Value;
+            swaggerDoc.Servers = new List<OpenApiServer>
+    {
+        new() { Url = $"https://{httpReq.Host}{cfgPrefix}" }
+    };
+        });
+
+    });
+}
+else
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
-    app.UseCors("AllowAngularDev");
 }
+
+app.UseSwaggerUI(c =>
+{
+    c.RoutePrefix = "swagger";
+    c.SwaggerEndpoint("./v1/swagger.json", "payment-service v1");
+});
 
 // Health endpoints
 app.MapHealthChecks("/health/live", new HealthCheckOptions
