@@ -1,32 +1,32 @@
-# property-service
+Ôªø# property-service
 
-> Mikrostoritev za upravljanje nepremiËnin (property) in izpostavitev API-ja prek REST in **GraphQL (HotChocolate)**.
+> Mikrostoritev za upravljanje nepremiƒçnin (property) in izpostavitev API-ja prek REST in **GraphQL (HotChocolate)**.
 
 ---
 
 ## Odgovornosti
 
-`property-service` izpostavlja **GraphQL API** za upravljanje nepremiËnin ter podpira iskanje/filtriranje podatkov.  
+`property-service` izpostavlja **GraphQL API** za upravljanje nepremiƒçnin ter podpira iskanje/filtriranje podatkov.  
 Podatke hrani v **PostgreSQL (Supabase)** in uporablja **Supabase Storage** za delo z datotekami (npr. slike).
 
 Glavne odgovornosti zajemajo:
-- Upravljanje nepremiËnin (CRUD)
+- Upravljanje nepremiƒçnin (CRUD)
 - Iskanje, filtriranje in paginacija rezultatov
 - Upravljanje povezanih entitet (npr. slike, oprema)
 - Integracija s Supabase Storage (upload/serve datotek, po potrebi)
 
 ---
 
-## Tehnoloöki sklad
+## Tehnolo≈°ki sklad
 
 - **.NET / ASP.NET Core**
 - **GraphQL** (HotChocolate)
 - **Entity Framework Core** + **Npgsql**
 - **PostgreSQL** (Supabase)
 - **Supabase Storage**
-- **Serilog** (JSON logi) *(Ëe je v projektu vkljuËen)*
-- **HealthChecks** (liveness/readiness) *(Ëe je v projektu vkljuËen)*
-- **Prometheus** (prometheus-net) *(Ëe je v projektu vkljuËen)*
+- **Serilog** (JSON logi) *(ƒçe je v projektu vkljuƒçen)*
+- **HealthChecks** (liveness/readiness) *(ƒçe je v projektu vkljuƒçen)*
+- **Prometheus** (prometheus-net) *(ƒçe je v projektu vkljuƒçen)*
 
 ---
 
@@ -46,28 +46,89 @@ Dostopno na (`/graphql`), prav tkao tudi UI
 
 ## Konfiguracija
 
-Servis uporablja **Options pattern** (`IOptions<T>`) in lahko ob zagonu validira nastavitve (`ValidateOnStart`, data annotations, dodatne validacije). »e je validacija omogoËena, se servis ob napaËni konfiguraciji **ne zaûene**.
+Servis uporablja **Options pattern** (`IOptions<T>`) in lahko ob zagonu validira nastavitve (`ValidateOnStart`, data annotations, dodatne validacije). ƒåe je validacija omogoƒçena, se servis ob napaƒçni konfiguraciji **ne za≈æene**.
 
 ### Nastavitve (appsettings)
 
 > Pri env var se `:` zamenja z `__` (npr. `SupabaseStorage__Url`).
 
 #### ConnectionStrings
-- `ConnectionStrings:Supabase` ó connection string do PostgreSQL baze (Supabase).
+- `ConnectionStrings:Supabase` ‚Äî connection string do PostgreSQL baze (Supabase).
 
 #### SupabaseStorage
-- `SupabaseStorage:Url` ó URL do Supabase projekta.
-- `SupabaseStorage:ServiceRoleKey` ó Service Role za storage v Supabase.
-- `SupabaseStorage:StorageBucket` ó ime bucket-a v Supabase storage (npr. `property-images`).
+- `SupabaseStorage:Url` ‚Äî URL do Supabase projekta.
+- `SupabaseStorage:ServiceRoleKey` ‚Äî Service Role za storage v Supabase.
+- `SupabaseStorage:StorageBucket` ‚Äî ime bucket-a v Supabase storage (npr. `property-images`).
 
 #### Logging
-- `Logging:LogLevel:Default` ó privzeti nivo logiranja.
-- `Logging:LogLevel:Microsoft.AspNetCore` ó nivo logiranja za ASP.NET Core.
+- `Logging:LogLevel:Default` ‚Äî privzeti nivo logiranja.
+- `Logging:LogLevel:Microsoft.AspNetCore` ‚Äî nivo logiranja za ASP.NET Core.
 
 #### SwaggerPrefix
-- `SwaggerPrefix` ó javna predpona (npr. /property) za pravilne Swagger URL-je. 
+- `SwaggerPrefix` ‚Äî javna predpona (npr. /property) za pravilne Swagger URL-je. 
 
 #### Hosting
-- `AllowedHosts` ó dovoljeni hosti (pogosto `*`).
+- `AllowedHosts` ‚Äî dovoljeni hosti (pogosto `*`).
 
 ---
+
+## CI/CD in pravila razvoja
+
+### Pregled
+CI/CD je sestavljen iz dveh delov:
+1. **Service repo (ta repo)**: build/test + izdelava in push Docker image-a.
+2. **Deployment repo (npr. `APSList/Hostflow`)**: Helm chart + `values*` kot ‚Äúsource of truth‚Äù za deploy v Kubernetes.
+
+---
+
+### GitHub Actions workflowi
+
+#### PR validacija (`pr.yaml`)
+- **Trigger**: PR ‚Üí `main`
+- **Koraki**: restore ‚Üí build ‚Üí test
+- **Pravila**: naslov PR mora slediti ‚Äúconventional‚Äù prefiksom:
+  - `feat:`, `fix:`, `chore:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `ci:`
+
+#### DEV CI/CD (`dev.yaml`)
+- **Trigger**: `push` ‚Üí `dev`
+- **Koraki**:
+  1) restore/build/test  
+  2) build Docker image  
+  3) push image v registry z tagom **kratkega SHA** (`${GITHUB_SHA::7}`)  
+  4) checkout deployment repota (`APSList/Hostflow`, veja `dev`)  
+  5) `helm upgrade --install` za **DEV** okolje (nastavi `image.tag` na kratek SHA)
+
+#### Release PR (`release-please.yaml`)
+- **Trigger**: `push` ‚Üí `main`
+- **Namen**: `release-please` pripravi/posodobi **release PR** (changelog + bump verzije) na podlagi conventional sprememb.
+
+#### PROD release (`release.yaml`)
+- **Trigger**: `git tag vX.Y.Z` (npr. `v1.2.3`)
+- **Koraki**:
+  1) restore/build/test  
+  2) build + push Docker image z tagom **verzije** (`vX.Y.Z`)  
+  3) checkout deployment repota (`APSList/Hostflow`, privzeta veja)  
+  4) `helm upgrade --install` za **PROD** okolje (nastavi `image.tag` na `vX.Y.Z`)
+
+---
+
+### Deploy model (service repo ‚Üí deployment repo)
+
+1. **Ta repo** zgradi artefakt:
+   - Docker image se zgradi iz trenutnega commita.
+   - Image se pushne v registry (DockerHub/registry).
+
+2. **Deployment repo** definira, *kako* in *kam* se deploya:
+   - Helm chart + `values.yaml` (in pogosto `values-dev.yaml`/`values-prod.yaml`) so v deployment repotu.
+   - Deployment repo je ‚Äúsource of truth‚Äù za:
+     - namespace, ingress, replicas, resources
+     - env var/secret reference (DB, storage, itd.)
+     - health probes, autoscaling, service/ports
+
+3. **Helm deploy**:
+   - Pipeline naredi `helm upgrade --install` in ob tem nastavi vsaj:
+     - `image.repository`
+     - `image.tag` (DEV = kratek SHA, PROD = verzija)
+
+---
+
