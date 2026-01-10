@@ -1,8 +1,13 @@
-﻿using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Prometheus;
+using property_service;
 using property_service.Database;
 using property_service.GraphQl.Queries;
 using property_service.Interfaces;
@@ -10,11 +15,13 @@ using property_service.Options;
 using property_service.Services;
 using Serilog;
 using Serilog.Formatting.Compact;
+using System.Security.Claims;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularDev", policy =>
@@ -23,7 +30,6 @@ builder.Services.AddCors(options =>
             .WithOrigins("http://localhost:4200")
             .AllowAnyHeader()
             .AllowAnyMethod();
-        // .AllowCredentials(); // samo èe uporabljaš cookies/auth z withCredentials
     });
 });
 
@@ -34,23 +40,25 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
-//Options
+// Options
 builder.Services
     .AddOptions<SupabaseStorageOptions>()
     .Bind(builder.Configuration.GetSection(SupabaseStorageOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(opt => !string.IsNullOrEmpty(opt.Url), "Url should not be empty")
-    .Validate(opt => !string.IsNullOrEmpty(opt.ServiceRoleKey), "Url should not be empty")
+    .Validate(opt => !string.IsNullOrEmpty(opt.ServiceRoleKey), "ServiceRoleKey should not be empty")
     .ValidateOnStart();
 
-//Dependency Injection
+builder.Services.AddHttpContextAccessor();
+
+// Dependency Injection
 builder.Services.AddScoped<IPropertyService, PropertyService>();
 builder.Services.AddSingleton<ISupabaseStorageService, SupabaseStorageService>();
+builder.Services.AddScoped<IOrganizationContext, OrganizationContext>();
 
+// GraphQL
 builder.Services
     .AddGraphQLServer()
     .ModifyCostOptions(o =>
@@ -63,23 +71,23 @@ builder.Services
     .AddFiltering()
     .AddSorting();
 
-//Database
+// Database
 builder.Services.AddDbContext<PropertyDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Supabase")));
 
-//Logging
+// Logging
 builder.Host.UseSerilog((context, config) =>
 {
     config
         .MinimumLevel.Information()
-        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning) // Manjši šum
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
         .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
         .Enrich.FromLogContext()
-        .Enrich.WithProperty("Service", "payment-service")
+        .Enrich.WithProperty("Service", "property-service")
         .WriteTo.Console(new RenderedCompactJsonFormatter());
 });
 
-//Health checks
+// Health checks
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy())
     .AddNpgSql(
@@ -87,6 +95,119 @@ builder.Services.AddHealthChecks()
         name: "postgres",
         failureStatus: HealthStatus.Unhealthy
     );
+
+// Auth (Supabase issuer)
+var issuer = "https://frauwrkbphmjngymcdyk.supabase.co/auth/v1";
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = issuer;
+        options.RequireHttpsMetadata = true;
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = issuer,
+
+            ValidateAudience = true,
+            ValidAudience = "authenticated",
+
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(5),
+
+            ValidAlgorithms = new[] { SecurityAlgorithms.EcdsaSha256 },
+
+            NameClaimType = ClaimTypes.NameIdentifier,
+            RoleClaimType = ClaimTypes.Role
+        };
+
+        options.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            $"{issuer}/.well-known/openid-configuration",
+            new OpenIdConnectConfigurationRetriever()
+        );
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                var identity = context.Principal?.Identity as ClaimsIdentity;
+                if (identity is null)
+                {
+                    context.Fail("Missing identity.");
+                    return Task.CompletedTask;
+                }
+
+                var userMetadataJson = context.Principal!.FindFirst("user_metadata")?.Value;
+                if (string.IsNullOrWhiteSpace(userMetadataJson))
+                {
+                    context.Fail("Missing user_metadata.");
+                    return Task.CompletedTask;
+                }
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(userMetadataJson);
+
+                    if (!doc.RootElement.TryGetProperty("organization_id", out var orgEl))
+                    {
+                        context.Fail("Missing user_metadata.organization_id.");
+                        return Task.CompletedTask;
+                    }
+
+                    int? orgId =
+                        orgEl.ValueKind == JsonValueKind.Number ? orgEl.GetInt32() :
+                        orgEl.ValueKind == JsonValueKind.String && int.TryParse(orgEl.GetString(), out var parsed) ? parsed :
+                        (int?)null;
+
+                    if (orgId is null || orgId <= 0)
+                    {
+                        context.Fail("Invalid organization_id.");
+                        return Task.CompletedTask;
+                    }
+
+                    identity.AddClaim(new Claim("organization_id", orgId.Value.ToString()));
+
+                    if (doc.RootElement.TryGetProperty("role", out var roleEl) &&
+                        roleEl.ValueKind == JsonValueKind.String)
+                    {
+                        var role = roleEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(role))
+                            identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                    }
+
+                    return Task.CompletedTask;
+                }
+                catch (JsonException)
+                {
+                    context.Fail("Invalid user_metadata JSON.");
+                    return Task.CompletedTask;
+                }
+            }
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("OrgRequired", policy => policy.RequireClaim("organization_id"));
+});
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "JWT Authorization header using the Bearer scheme."
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("bearer", document)] = []
+    });
+});
 
 var app = builder.Build();
 
@@ -98,13 +219,11 @@ if (!string.IsNullOrEmpty(cfgPrefix))
     {
         c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
         {
-            var basePath = httpReq.PathBase.Value;
             swaggerDoc.Servers = new List<OpenApiServer>
-    {
-        new() { Url = $"https://{httpReq.Host}{cfgPrefix}" }
-    };
+            {
+                new() { Url = $"https://{httpReq.Host}{cfgPrefix}" }
+            };
         });
-
     });
 }
 else
@@ -115,7 +234,7 @@ else
 app.UseSwaggerUI(c =>
 {
     c.RoutePrefix = "swagger";
-    c.SwaggerEndpoint("./v1/swagger.json", "payment-service v1");
+    c.SwaggerEndpoint("./v1/swagger.json", "property-service v1");
 });
 
 // Health endpoints
@@ -132,8 +251,12 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 // GraphQL endpoint
 app.MapGraphQL("/graphql");
 
+app.UseHttpMetrics();
+app.MapMetrics();
+
 app.UseHttpsRedirection();
 
+app.UseAuthentication();   // <- dodano (manjkalo)
 app.UseAuthorization();
 
 app.MapGet("/ok", () =>
@@ -147,9 +270,6 @@ app.MapGet("/error", () =>
     Log.Error("Something went wrong");
     return Results.Problem("Error");
 });
-
-app.UseHttpMetrics();     // meri HTTP odzivnost, status kode, metode
-app.MapMetrics();         // metrics endpoint
 
 app.UseSerilogRequestLogging();
 

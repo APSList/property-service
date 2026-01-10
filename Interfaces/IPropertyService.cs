@@ -4,7 +4,7 @@ namespace property_service.Interfaces;
 
 public interface IPropertyService
 {
-    Task<List<Property>> GetPropertiesAsync(PropertyFilter filter);
+    Task<List<Property>> GetPropertiesAsync();
     Task<Property?> GetPropertyByIdAsync(int id);
     Task<int> InsertPropertyAsync(PropertyCreateRequestDTO dto);
     Task<int?> UpdatePropertyAsync(int id, PropertyCreateRequestDTO dto);
