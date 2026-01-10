@@ -59,6 +59,7 @@ builder.Services
         o.MaxTypeCost = 5_000;
     })
     .AddQueryType<PropertyQuery>()
+    .AddAuthorization()
     .AddFiltering()
     .AddSorting();
 
