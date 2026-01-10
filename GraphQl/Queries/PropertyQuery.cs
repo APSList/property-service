@@ -1,7 +1,7 @@
 ﻿using HotChocolate.Authorization;
 using System.Security.Claims;
-using property_service.Interfaces;
 using property_service.Models.PropertyModels;
+using property_service.Database;
 
 namespace property_service.GraphQl.Queries;
 
@@ -10,9 +10,9 @@ public class PropertyQuery
     [UseFiltering]
     [UseSorting]
     [Authorize(Policy = "OrgRequired")]
-    public async Task<IQueryable<Property>> GetProperties(
+    public IQueryable<Property> GetProperties(
         ClaimsPrincipal user,
-        [Service] IPropertyService service)
+        [Service] PropertyDbContext db)
     {
         var orgIdRaw = user.FindFirst("organization_id")?.Value;
 
@@ -25,8 +25,6 @@ public class PropertyQuery
                     .Build());
         }
 
-        var list = await service.GetPropertiesAsync();
-
-        return list.AsQueryable();
+        return db.Properties.Where(x => x.OrganizationId == orgId);
     }
 }
