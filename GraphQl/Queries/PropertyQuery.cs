@@ -1,24 +1,15 @@
-﻿using property_service.Database;
+﻿using HotChocolate.Authorization;
+using property_service.Interfaces;
 using property_service.Models.PropertyModels;
 
 namespace property_service.GraphQl.Queries;
 
 public class PropertyQuery
 {
-    // GET properties (z GraphQL filterji & sortingom)
-    [UseFiltering]
-    [UseSorting]
-    public IQueryable<Property> GetProperties(
-        [Service] PropertyDbContext db)
+    [Authorize(Policy = "OrgRequired")]
+    public async Task<IEnumerable<Property>> GetProperties(
+        [Service] IPropertyService service)
     {
-        return db.Properties;
-    }
-
-    // GET property by id
-    public async Task<Property?> GetPropertyById(
-        int id,
-        [Service] PropertyDbContext db)
-    {
-        return await db.Properties.FindAsync(id);
+        return await service.GetPropertiesAsync();
     }
 }
