@@ -12,7 +12,7 @@ public class Property
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     [Column("id")]
-    public int Id { get; set; }
+    public int? Id { get; set; }
 
     [Column("organization_id")]
     public int OrganizationId { get; set; }
@@ -30,7 +30,7 @@ public class Property
     public string? Country { get; set; }
 
     [Column("property_type")]
-    public string? PropertyType { get; set; }
+    public PropertyTypeEnum PropertyType { get; set; }
 
     [Column("max_guests")]
     public int? MaxGuests { get; set; }
@@ -64,7 +64,7 @@ public class Property
     public string? UpdatedBy { get; set; }
 
     // NAVIGATION
-    public List<PropertyImage> Images { get; set; } = [];
+    public List<PropertyImage> PropertyImages { get; set; } = [];
     public List<PropertyAmenity> PropertyAmenities { get; set; } = [];
 
 }

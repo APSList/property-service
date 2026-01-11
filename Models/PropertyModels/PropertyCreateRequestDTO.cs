@@ -7,7 +7,7 @@ public class PropertyCreateRequestDTO
     public string Name { get; set; } = null!;
 
     public string? Description { get; set; }
-    public string? Adress { get; set; }
+    public string? Address { get; set; }
     public string? Country { get; set; }
 
     public PropertyTypeEnum PropertyTypeEnum { get; set; }
@@ -20,6 +20,7 @@ public class PropertyCreateRequestDTO
     public PropertyStatusEnum Status { get; set; }
 
     public List<IFormFile>? Images { get; set; }
-    public List<AmenityTypeEnum>? Amenities { get; set; }
+    public List<string>? ExistingImagePaths { get; set; }
 
+    public List<AmenityTypeEnum>? Amenities { get; set; }
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using property_service.Models.PropertyAmenityModels;
 using property_service.Models.PropertyImageModels;
 using property_service.Models.PropertyModels;
@@ -36,7 +37,14 @@ public class PropertyDbContext : DbContext
         modelBuilder.Entity<PropertyAmenity>()
             .HasOne(pa => pa.Property)
             .WithMany(p => p.PropertyAmenities)
-            .HasForeignKey(pa => pa.PropertyId);
+            .HasForeignKey(pa => pa.PropertyId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PropertyImage>()
+        .HasOne(p => p.Property)
+        .WithMany(b => b.PropertyImages)
+        .HasForeignKey(p => p.PropertyId)
+        .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<PropertyAmenity>()
        .Property(e => e.AmenityName)

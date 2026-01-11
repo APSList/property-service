@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using property_service.Interfaces;
 using property_service.Models.PropertyModels;
 
@@ -19,15 +20,17 @@ public class PropertyController : ControllerBase
     // GET /property
     [HttpGet]
     [EndpointSummary("Get all properties")]
+    [Authorize(Policy = "OrgRequired")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(List<Property>))]
-    public async Task<ActionResult<List<Property>>> GetProperties([FromQuery] PropertyFilter filter)
+    public async Task<ActionResult<List<Property>>> GetProperties()
     {
-        var properties = await _propertyService.GetPropertiesAsync(filter);
+        var properties = await _propertyService.GetPropertiesAsync();
         return Ok(properties);
     }
 
     // GET /property/{id}
     [HttpGet("{id:int}")]
+    [Authorize(Policy = "OrgRequired")]
     [EndpointSummary("Retrieves the property matching the specified ID.")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(Property))]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -42,6 +45,7 @@ public class PropertyController : ControllerBase
 
     // POST /property
     [HttpPost]
+    [Authorize(Policy = "OrgRequired")]
     [EndpointSummary("Creates a new property with optional images.")]
     [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(int))]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -55,13 +59,14 @@ public class PropertyController : ControllerBase
 
     // PUT /property/{id}
     [HttpPut("{id:int}")]
+    [Authorize(Policy = "OrgRequired")]
     [EndpointSummary("Updates the property matching the specified ID.")]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(int))]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [Consumes("application/json")]
+    [Consumes("multipart/form-data")]
     public async Task<ActionResult<int>> Update(
         int id,
-        [FromBody] PropertyCreateRequestDTO dto)
+        [FromForm] PropertyCreateRequestDTO dto)
     {
         var updatedId = await _propertyService.UpdatePropertyAsync(id, dto);
         if (updatedId == null)
@@ -72,6 +77,7 @@ public class PropertyController : ControllerBase
 
     // DELETE /property/{id}
     [HttpDelete("{id:int}")]
+    [Authorize(Policy = "OrgRequired")]
     [EndpointSummary("Deletes the property matching the specified ID and all its images.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

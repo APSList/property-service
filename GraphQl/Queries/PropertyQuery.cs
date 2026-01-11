@@ -1,24 +1,30 @@
-﻿using property_service.Database;
+﻿using HotChocolate.Authorization;
+using System.Security.Claims;
 using property_service.Models.PropertyModels;
+using property_service.Database;
 
 namespace property_service.GraphQl.Queries;
 
 public class PropertyQuery
 {
-    // GET properties (z GraphQL filterji & sortingom)
     [UseFiltering]
     [UseSorting]
+    [Authorize(Policy = "OrgRequired")]
     public IQueryable<Property> GetProperties(
+        ClaimsPrincipal user,
         [Service] PropertyDbContext db)
     {
-        return db.Properties;
-    }
+        var orgIdRaw = user.FindFirst("organization_id")?.Value;
 
-    // GET property by id
-    public async Task<Property?> GetPropertyById(
-        int id,
-        [Service] PropertyDbContext db)
-    {
-        return await db.Properties.FindAsync(id);
+        if (string.IsNullOrWhiteSpace(orgIdRaw) || !int.TryParse(orgIdRaw, out var orgId))
+        {
+            throw new GraphQLException(
+                ErrorBuilder.New()
+                    .SetMessage("Missing or invalid organization_id in token.")
+                    .SetCode("ORG_ID_MISSING")
+                    .Build());
+        }
+
+        return db.Properties.Where(x => x.OrganizationId == orgId);
     }
 }
