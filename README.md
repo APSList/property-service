@@ -1,7 +1,7 @@
 ﻿# property-service
 
 > Mikrostoritev za upravljanje nepremičnin (property) in izpostavitev API-ja prek REST in **GraphQL (HotChocolate)**.
-
+Storitev je dostopona na https://hostflow.software/property/swagger/index.html
 ---
 
 ## Odgovornosti
